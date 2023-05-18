@@ -17,6 +17,9 @@ from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 from llama import ModelArgs, Transformer, Tokenizer, LLaMA
 
 
+USER = os.environ["USER"]
+
+
 def setup_model_parallel() -> Tuple[int, int]:
     if os.getenv('OMPI_COMM_WORLD_SIZE') is not None:
         rank = int(os.getenv('OMPI_COMM_WORLD_RANK'))
@@ -81,7 +84,7 @@ def load(
     return generator
 
 
-def main(
+def main_generate(
     ckpt_dir: str,
     tokenizer_path: str,
     temperature: float = 0.8,
@@ -133,6 +136,58 @@ cheese =>""",
     for result in results:
         print(result)
         print("\n==================================\n")
+
+
+def main(
+    ckpt_dir: str,
+    tokenizer_path: str,
+    temperature: float = 0.8,
+    top_p: float = 0.95,
+    max_seq_len: int = 512,
+    max_gen_len: int = 256,
+    max_batch_size: int = 32,
+):
+    # local_rank, world_size = setup_model_parallel()
+    rank, local_rank, world_size = setup_model_parallel()
+    if rank > 0:
+        sys.stdout = open(os.devnull, "w")
+
+    print("Loading HF library...")
+    import datasets
+    from torch.utils.data import DataLoader
+
+    print("Getting datasets...")
+    squad = datasets.load_from_disk(f'/home/gridsan/{USER}/languagemodels/datasets/squad')
+    subset = squad['train'].select(range(128))
+    def make_prompts(example):
+        example['prompt'] = ' '.join([example['context'], example['question']])
+        return example
+
+    subset = subset.map(make_prompts, remove_columns=subset.column_names)
+
+    print("Loading model...")
+    generator = load(
+        # ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
+        ckpt_dir, tokenizer_path, rank, world_size, max_seq_len, max_batch_size
+    )
+
+    print("Preprocessing data and loading to gpu...")
+    def collater(batch):
+        tokenized = [generator.tokenizer.encode(x, bos=True, eos=False) for x in batch]
+        min_prompt_size = min([len(t) for t in tokenized])
+        max_prompt_size = max([len(t) for t in tokenized])
+        total_len = min(max_seq_len, max_gen_len + max_prompt_size)
+        tokens = torch.full((len(batch), total_len), generator.tokenizer.pad_id).cuda().long()
+        for k, t in enumerate(tokenized):
+            tokens[k, : len(t)] = torch.tensor(t)
+        return min_prompt_size, tokens
+
+    prompts = DataLoader(subset['prompt'], batch_size=8, collate_fn=collater)
+
+    print("Generating stream...")
+    generator.generate_stream(
+        prompts, max_gen_len=max_gen_len, temperature=temperature, top_p=top_p
+    )
 
 
 if __name__ == "__main__":

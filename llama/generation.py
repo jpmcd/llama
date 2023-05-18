@@ -4,6 +4,7 @@
 from typing import List
 
 import torch
+from torch.utils.data import DataLoader
 
 from llama.tokenizer import Tokenizer
 from llama.model import Transformer
@@ -64,6 +65,46 @@ class LLaMA:
                 pass
             decoded.append(self.tokenizer.decode(t))
         return decoded
+
+    def generate_stream(self,
+        dataloader: DataLoader,
+        max_gen_len: int,
+        temperature: float = 0.8,
+        top_p: float = 0.95,
+    ):
+        for start_pos, tokens in dataloader:
+            input_text_mask = tokens != self.tokenizer.pad_id
+            prev_pos = 0
+            total_len = tokens.size(dim=1)
+            for cur_pos in range(start_pos, total_len):
+                logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+                if temperature > 0:
+                    probs = torch.softmax(logits / temperature, dim=-1)
+                    next_token = sample_top_p(probs, top_p)
+                else:
+                    next_token = torch.argmax(logits, dim=-1)
+                next_token = next_token.reshape(-1)
+                # only replace token if prompt has already been generated
+                next_token = torch.where(
+                    input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
+                )
+                tokens[:, cur_pos] = next_token
+                prev_pos = cur_pos
+            # decode batch
+            # decoded = []
+            for i, t in enumerate(tokens.tolist()):
+                # cut to max gen len
+                # t = t[: len(prompt_tokens[i]) + max_gen_len]
+                # cut to eos tok if any
+                try:
+                    t = t[: t.index(self.tokenizer.eos_id)]
+                except ValueError:
+                    pass
+                out = self.tokenizer.decode(t)
+                print(out)
+                print("\n==================================\n")
+                # decoded.append(out)
+        return
 
 
 def sample_top_p(probs, p):
