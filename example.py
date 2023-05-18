@@ -8,6 +8,7 @@ import torch
 import fire
 import time
 import json
+import socket
 
 from pathlib import Path
 
@@ -17,16 +18,33 @@ from llama import ModelArgs, Transformer, Tokenizer, LLaMA
 
 
 def setup_model_parallel() -> Tuple[int, int]:
-    local_rank = int(os.environ.get("LOCAL_RANK", -1))
-    world_size = int(os.environ.get("WORLD_SIZE", -1))
+    if os.getenv('OMPI_COMM_WORLD_SIZE') is not None:
+        rank = int(os.getenv('OMPI_COMM_WORLD_RANK'))
+        local_rank = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK'))
+        world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE'))
+    else:
+        rank = int(os.environ.get("RANK", -1))
+        local_rank = int(os.environ.get("LOCAL_RANK", -1))
+        world_size = int(os.environ.get("WORLD_SIZE", -1))
 
-    torch.distributed.init_process_group("nccl")
+    hostname = socket.gethostname()
+    log_rank = '(RANK, LOCAL_RANK, WORLD_SIZE, HOSTNAME) : ({}, {}, {}, {})'.format(
+        rank,
+        local_rank,
+        world_size,
+        socket.gethostname(),
+    )
+    print(log_rank)
+    # print(f'() : ({os.getenv("RANK")},{socket.gethostname()})')
+
+    # torch.distributed.init_process_group("nccl")
+    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
     initialize_model_parallel(world_size)
     torch.cuda.set_device(local_rank)
 
     # seed must be the same in all processes
     torch.manual_seed(1)
-    return local_rank, world_size
+    return rank, local_rank, world_size
 
 
 def load(
@@ -71,12 +89,14 @@ def main(
     max_seq_len: int = 512,
     max_batch_size: int = 32,
 ):
-    local_rank, world_size = setup_model_parallel()
+    # local_rank, world_size = setup_model_parallel()
+    rank, local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
         sys.stdout = open(os.devnull, "w")
 
     generator = load(
-        ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
+        # ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
+        ckpt_dir, tokenizer_path, rank, world_size, max_seq_len, max_batch_size
     )
 
     prompts = [
@@ -116,4 +136,6 @@ cheese =>""",
 
 
 if __name__ == "__main__":
+    # import locale
+    # print("ENCODING:", locale.getpreferredencoding())
     fire.Fire(main)
