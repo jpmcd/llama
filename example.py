@@ -160,7 +160,7 @@ def main(
     squad = datasets.load_from_disk(f'/home/gridsan/{USER}/languagemodels/datasets/squad')
     subset = squad['train'].select(range(128))
     def make_prompts(example):
-        example['prompt'] = ' '.join([example['context'], example['question']])
+        example['prompt'] = '\n\n'.join([example['context'], example['question']])
         return example
 
     subset = subset.map(make_prompts, remove_columns=subset.column_names)
