@@ -1,9 +1,9 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the GNU General Public License version 3.
 
-PRESIGNED_URL=""             # replace with presigned url from email
-MODEL_SIZE="7B,13B,30B,65B"  # edit this list with the model sizes you wish to download
-TARGET_FOLDER=""             # where all files should end up
+PRESIGNED_URL="https://dobf1k6cxlizq.cloudfront.net/*?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9kb2JmMWs2Y3hsaXpxLmNsb3VkZnJvbnQubmV0LyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE2ODE4OTIxNDV9fX1dfQ__&Signature=bk6JLCMltrjMrJhhkHZfpgxmCuhld4V6vCL~jGDfzfuOMAH2hDXtb4XEXOZX2cHQUOtpKaOcfPW0ia3hC4j8gNGQ4yq7sIjPbXuHAuJsTgVhmi4W7t8IPQfWguDe9Jw41p~EGjOHTn7tCr5~q~hRWHAZ~3CjpIGaeSUdTGMcj7gbhQQW7eqhkwAkiPpKiVFWasBBfKoeSDZVCTCt68vnhdBrrs5DPKuFF2K8Gw3VvBRmwt8fjJGxGkaFGti7MT5wf~udgat-fyfhm5ImkzOkkJLhdvm0WWGVstqdOj5W79npRzqhHmdPvKF6YB8qlvsuqVrEv-r6r900a5KGzJrYOg__&Key-Pair-Id=K231VYXPC1TA1R"             # replace with presigned url from email
+MODEL_SIZE="65B,30B,13B,7B"  # edit this list with the model sizes you wish to download
+TARGET_FOLDER="/home/gridsan/${USER}/fastai_shared/${USER}/llama/raw"             # where all files should end up
 
 declare -A N_SHARD_DICT
 
