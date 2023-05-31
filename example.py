@@ -23,24 +23,23 @@ USER = os.environ["USER"]
 
 
 def setup_model_parallel() -> Tuple[int, int]:
-    if os.getenv('OMPI_COMM_WORLD_SIZE') is not None:
-        rank = int(os.getenv('OMPI_COMM_WORLD_RANK'))
-        local_rank = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK'))
-        world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE'))
+    if os.environ.get("OMPI_COMM_WORLD_SIZE") is not None:
+        rank = int(os.environ.get("OMPI_COMM_WORLD_RANK"))
+        local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK"))
+        world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE"))
     else:
         rank = int(os.environ.get("RANK", -1))
         local_rank = int(os.environ.get("LOCAL_RANK", -1))
         world_size = int(os.environ.get("WORLD_SIZE", -1))
 
     hostname = socket.gethostname()
-    log_rank = '(RANK, LOCAL_RANK, WORLD_SIZE, HOSTNAME) : ({}, {}, {}, {})'.format(
+    log_rank = "(RANK, LOCAL_RANK, WORLD_SIZE, HOSTNAME) : ({}, {}, {}, {})".format(
         rank,
         local_rank,
         world_size,
         socket.gethostname(),
     )
     print(log_rank)
-    # print(f'() : ({os.getenv("RANK")},{socket.gethostname()})')
 
     # torch.distributed.init_process_group("nccl")
     torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
