@@ -9,12 +9,14 @@ import fire
 import time
 import json
 import socket
-
 from pathlib import Path
 
+from torch.utils.data import DataLoader
+import datasets
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 
 from llama import ModelArgs, Transformer, Tokenizer, LLaMA
+from llama.data import get_input_ids_fn, get_collater
 
 
 USER = os.environ["USER"]
@@ -129,7 +131,7 @@ plush girafe => girafe peluche
 
 cheese =>""",
     ]
-    results = generator.generate(
+    results = generator.generate_from_strings(
         prompts, max_gen_len=256, temperature=temperature, top_p=top_p
     )
 
@@ -145,52 +147,31 @@ def main(
     top_p: float = 0.95,
     max_seq_len: int = 512,
     max_gen_len: int = 256,
-    max_batch_size: int = 32,
+    batch_size: int = 32,
 ):
     # local_rank, world_size = setup_model_parallel()
     rank, local_rank, world_size = setup_model_parallel()
     if rank > 0:
         sys.stdout = open(os.devnull, "w")
 
-    print("Loading HF library...")
-    import datasets
-    from torch.utils.data import DataLoader
-
-    print("Getting datasets...")
-    squad = datasets.load_from_disk(f'/home/gridsan/{USER}/languagemodels/datasets/squad')
-    subset = squad['train'].select(range(128))
-    def make_prompts(example):
-        example['prompt'] = '\n\n'.join([example['context'], example['question']])
-        return example
-
-    subset = subset.map(make_prompts, remove_columns=subset.column_names)
-
     print("Loading model...")
     generator = load(
         # ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
-        ckpt_dir, tokenizer_path, rank, world_size, max_seq_len, max_batch_size
+        ckpt_dir, tokenizer_path, rank, world_size, max_seq_len, batch_size
     )
-
+    print("Getting datasets...")
+    squad = datasets.load_from_disk(f'/home/gridsan/{USER}/languagemodels/datasets/squad')
+    subset = squad['train'].select(range(8))  # 128))
     print("Preprocessing data and loading to gpu...")
-    def collater(batch):
-        tokenized = [generator.tokenizer.encode(x, bos=True, eos=False) for x in batch]
-        min_prompt_size = min([len(t) for t in tokenized])
-        max_prompt_size = max([len(t) for t in tokenized])
-        total_len = min(max_seq_len, max_gen_len + max_prompt_size)
-        tokens = torch.full((len(batch), total_len), generator.tokenizer.pad_id).cuda().long()
-        for k, t in enumerate(tokenized):
-            tokens[k, : len(t)] = torch.tensor(t)
-        return min_prompt_size, tokens
-
-    prompts = DataLoader(subset['prompt'], batch_size=8, collate_fn=collater)
-
+    get_input_ids = get_input_ids_fn(generator.tokenizer, True)
+    subset = subset.map(get_input_ids, remove_columns=subset.column_names)
+    collater = get_collater(max_seq_len, max_gen_len=max_gen_len, pad_id=generator.tokenizer.pad_id)
+    prompts = DataLoader(subset, batch_size=8, collate_fn=collater)
     print("Generating stream...")
-    generator.generate_stream(
+    generator.generate(
         prompts, max_gen_len=max_gen_len, temperature=temperature, top_p=top_p
     )
 
 
 if __name__ == "__main__":
-    # import locale
-    # print("ENCODING:", locale.getpreferredencoding())
     fire.Fire(main)

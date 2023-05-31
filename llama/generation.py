@@ -4,6 +4,7 @@
 from typing import List
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from llama.tokenizer import Tokenizer
@@ -15,7 +16,7 @@ class LLaMA:
         self.model = model
         self.tokenizer = tokenizer
 
-    def generate(
+    def generate_from_strings(
         self,
         prompts: List[str],
         max_gen_len: int,
@@ -40,7 +41,7 @@ class LLaMA:
         start_pos = min_prompt_size
         prev_pos = 0
         for cur_pos in range(start_pos, total_len):
-            logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            logits = self.model.forward_only(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits / temperature, dim=-1)
                 next_token = sample_top_p(probs, top_p)
@@ -66,18 +67,20 @@ class LLaMA:
             decoded.append(self.tokenizer.decode(t))
         return decoded
 
-    def generate_stream(self,
+    def generate(self,
         dataloader: DataLoader,
         max_gen_len: int,
         temperature: float = 0.8,
         top_p: float = 0.95,
+        output: bool = True,
     ):
         for start_pos, tokens in dataloader:
             input_text_mask = tokens != self.tokenizer.pad_id
             prev_pos = 0
             total_len = tokens.size(dim=1)
             for cur_pos in range(start_pos, total_len):
-                logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+                logits = self.model.forward_only(tokens[:, prev_pos:cur_pos], prev_pos)
+                # greedily/randomly choose next token
                 if temperature > 0:
                     probs = torch.softmax(logits / temperature, dim=-1)
                     next_token = sample_top_p(probs, top_p)
@@ -91,20 +94,38 @@ class LLaMA:
                 tokens[:, cur_pos] = next_token
                 prev_pos = cur_pos
             # decode batch
-            # decoded = []
-            for i, t in enumerate(tokens.tolist()):
-                # cut to max gen len
-                # t = t[: len(prompt_tokens[i]) + max_gen_len]
-                # cut to eos tok if any
-                try:
-                    t = t[: t.index(self.tokenizer.eos_id)]
-                except ValueError:
-                    pass
-                out = self.tokenizer.decode(t)
-                print(out)
-                print("\n==================================\n")
-                # decoded.append(out)
+            if output:
+                for i, t in enumerate(tokens.tolist()):
+                    # cut to eos tok if any
+                    try:
+                        t = t[: t.index(self.tokenizer.eos_id)]
+                    except ValueError:
+                        pass
+                    out = self.tokenizer.decode(t)
+                    print(out)
+                    print("\n==================================\n")
         return
+
+    def train_step(self, tokens, targets, start):
+        self.optimizer.zero_grad()
+        logits = self.model.forward(tokens, start)
+        loss = F.cross_entropy(logits, targets, ignore_index=-1)
+        loss.backward()
+        self.optimizer.step()
+        
+
+    def train(self,
+        dataloader: DataLoader,
+    ):
+        for batch in dataloader:
+            start, tokens, target_mask = batch
+            prev_pos = 0
+            total_len = tokens.size(dim=1)
+            # TODO: apply weight to each row
+            for cur_pos in range(start, total_len):
+                targets = torch.where(target_mask, tokens[:, cur_pos], -1)
+                self.train_step(tokens[:, prev_pos:cur_pos], targets, prev_pos)
+                prev_pos = cur_pos
 
 
 def sample_top_p(probs, p):
