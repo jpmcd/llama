@@ -16,7 +16,7 @@ import datasets
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 
 from llama import ModelArgs, Transformer, Tokenizer, LLaMA
-from llama.data import get_input_ids_fn, get_collater
+from llama.data import get_input_ids_fn, get_collater_fn
 
 
 USER = os.environ["USER"]
@@ -158,17 +158,22 @@ def main(
         # ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
         ckpt_dir, tokenizer_path, rank, world_size, max_seq_len, batch_size
     )
+    tokenizer = generator.tokenizer
     print("Getting datasets...")
     squad = datasets.load_from_disk(f'/home/gridsan/{USER}/languagemodels/datasets/squad')
     subset = squad['train'].select(range(8))  # 128))
     print("Preprocessing data and loading to gpu...")
-    get_input_ids = get_input_ids_fn(generator.tokenizer, True)
+    get_input_ids = get_input_ids_fn(tokenizer)
     subset = subset.map(get_input_ids, remove_columns=subset.column_names)
-    collater = get_collater(max_seq_len, max_gen_len=max_gen_len, pad_id=generator.tokenizer.pad_id)
-    prompts = DataLoader(subset, batch_size=8, collate_fn=collater)
+    if "target_ids" in subset:
+        dataset = list(zip(subset["input_ids"], subset["target_ids"]))
+    else:
+        dataset = subset["input_ids"]
+    collater = get_collater_fn(max_seq_len=max_seq_len, max_gen_len=max_gen_len, pad_id=tokenizer.pad_id)
+    loader = DataLoader(dataset, batch_size=8, collate_fn=collater)
     print("Generating stream...")
     generator.generate(
-        prompts, max_gen_len=max_gen_len, temperature=temperature, top_p=top_p
+        loader, max_gen_len=max_gen_len, temperature=temperature, top_p=top_p
     )
 
 

@@ -74,7 +74,7 @@ class LLaMA:
         top_p: float = 0.95,
         output: bool = True,
     ):
-        for start_pos, tokens in dataloader:
+        for start_pos, tokens, _ in dataloader:
             input_text_mask = tokens != self.tokenizer.pad_id
             prev_pos = 0
             total_len = tokens.size(dim=1)
