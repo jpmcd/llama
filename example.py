@@ -148,28 +148,28 @@ def main(
     max_gen_len: int = 256,
     batch_size: int = 32,
 ):
-    # local_rank, world_size = setup_model_parallel()
     rank, local_rank, world_size = setup_model_parallel()
     if rank > 0:
         sys.stdout = open(os.devnull, "w")
 
     print("Loading model...")
     generator = load(
-        # ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
         ckpt_dir, tokenizer_path, rank, world_size, max_seq_len, batch_size
     )
     tokenizer = generator.tokenizer
     print("Getting datasets...")
-    squad = datasets.load_from_disk(f'/home/gridsan/{USER}/languagemodels/datasets/squad')
+    dataset_path = f"/home/gridsan/{USER}/languagemodels/datasets/squad"
+    squad = datasets.load_from_disk(dataset_path)
     subset = squad['train'].select(range(8))  # 128))
     print("Preprocessing data and loading to gpu...")
     get_input_ids = get_input_ids_fn(tokenizer)
     subset = subset.map(get_input_ids, remove_columns=subset.column_names)
-    if "target_ids" in subset:
-        dataset = list(zip(subset["input_ids"], subset["target_ids"]))
-    else:
-        dataset = subset["input_ids"]
-    collater = get_collater_fn(max_seq_len=max_seq_len, max_gen_len=max_gen_len, pad_id=tokenizer.pad_id)
+    dataset = subset["input_ids"]
+    collater = get_collater_fn(
+        max_seq_len=max_seq_len,
+        max_gen_len=max_gen_len,
+        pad_id=tokenizer.pad_id,
+    )
     loader = DataLoader(dataset, batch_size=8, collate_fn=collater)
     print("Generating stream...")
     generator.generate(

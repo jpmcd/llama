@@ -2,11 +2,11 @@ import datasets
 import torch
 from torch.utils.data import DataLoader
 
-def get_input_ids_fn(tokenizer, labels=False):
+def get_input_ids_fn(tokenizer, make_targets=False):
     def get_input_ids(example):
         text = " ".join([example["context"], example["question"]])
         example["input_ids"] = tokenizer.encode(text, bos=True, eos=False)
-        if labels:
+        if make_targets:
             example["target_ids"] = tokenizer.encode(example["answers"]["text"][0], bos=False, eos=True)
         return example
     return get_input_ids
