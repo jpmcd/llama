@@ -23,6 +23,14 @@ from llama.data import get_input_ids_fn, get_collater_fn
 USER = os.environ["USER"]
 
 
+def time_elapsed(prev, out=True):
+    cur = time.time()
+    elapsed = cur - prev
+    if out:
+        print(f"Elapsed... {elapsed: .2f} seconds")
+    return cur
+
+
 def setup_model_parallel() -> Tuple[int, int, int]:
     if os.environ.get('OMPI_COMM_WORLD_SIZE') is not None:
         rank = int(os.environ.get('OMPI_COMM_WORLD_RANK'))
@@ -87,6 +95,8 @@ def load(
 
 
 def main(args):
+    start_time = time.time()
+    prev_time = start_time
     rank, local_rank, world_size = setup_model_parallel()
     if rank > 0:
         sys.stdout = open(os.devnull, "w")
@@ -96,9 +106,12 @@ def main(args):
         args.checkpoint_dir, args.tokenizer_path, rank, world_size, args.max_seq_len, args.batch_size,
     )
     tokenizer = generator.tokenizer
+    prev = time.time()
     print("Getting datasets...")
     squad = datasets.load_from_disk(args.dataset_path)
     subset = squad['train'].select(range(args.max_eval_samples))
+    n_examples = len(subset)
+    prev = time_elapsed(prev)
     print("Preprocessing data and loading to gpu...")
     get_input_ids = get_input_ids_fn(tokenizer, make_targets=args.train)
     subset = subset.map(get_input_ids, remove_columns=subset.column_names)
@@ -110,13 +123,16 @@ def main(args):
         make_targets=args.train,
     )
     loader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collater)
+    prev = time_elapsed(prev)
     if args.train:
         print("Finetuning on examples...")
+        prev = time_elapsed(prev)
     if args.generate:
-        print("Generating stream...")
+        print(f"Generating stream, {n_examples} examples...")
         generator.generate(
             loader, max_gen_len=args.max_gen_len, temperature=args.temperature, top_p=args.top_p, output=False,
         )
+        prev = time_elapsed(prev)
 
 
 if __name__ == "__main__":
