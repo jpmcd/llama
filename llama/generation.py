@@ -3,6 +3,8 @@
 
 from typing import List
 
+from tqdm import tqdm
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -74,36 +76,40 @@ class LLaMA:
         top_p: float = 0.95,
         output: bool = True,
     ):
-        for start_pos, tokens, _ in dataloader:
-            input_text_mask = tokens != self.tokenizer.pad_id
-            prev_pos = 0
-            total_len = tokens.size(dim=1)
-            for cur_pos in range(start_pos, total_len):
-                logits = self.model.forward_only(tokens[:, prev_pos:cur_pos], prev_pos)
-                # greedily/randomly choose next token
-                if temperature > 0:
-                    probs = torch.softmax(logits / temperature, dim=-1)
-                    next_token = sample_top_p(probs, top_p)
-                else:
-                    next_token = torch.argmax(logits, dim=-1)
-                next_token = next_token.reshape(-1)
-                # only replace token if prompt has already been generated
-                next_token = torch.where(
-                    input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
-                )
-                tokens[:, cur_pos] = next_token
-                prev_pos = cur_pos
-            # decode batch
-            if output:
-                for i, t in enumerate(tokens.tolist()):
-                    # cut to eos tok if any
-                    try:
-                        t = t[: t.index(self.tokenizer.eos_id)]
-                    except ValueError:
-                        pass
-                    out = self.tokenizer.decode(t)
-                    print(out)
-                    print("\n==================================\n")
+        try:
+            for batch_ind, (start_pos, tokens, _) in tqdm(enumerate(dataloader)):
+                input_text_mask = tokens != self.tokenizer.pad_id
+                prev_pos = 0
+                total_len = tokens.size(dim=1)
+                for cur_pos in range(start_pos, total_len):
+                    logits = self.model.forward_only(tokens[:, prev_pos:cur_pos], prev_pos)
+                    # greedily/randomly choose next token
+                    if temperature > 0:
+                        probs = torch.softmax(logits / temperature, dim=-1)
+                        next_token = sample_top_p(probs, top_p)
+                    else:
+                        next_token = torch.argmax(logits, dim=-1)
+                    next_token = next_token.reshape(-1)
+                    # only replace token if prompt has already been generated
+                    next_token = torch.where(
+                        input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
+                    )
+                    tokens[:, cur_pos] = next_token
+                    prev_pos = cur_pos
+                # decode batch
+                if output:
+                    for i, t in enumerate(tokens.tolist()):
+                        # cut to eos tok if any
+                        try:
+                            t = t[: t.index(self.tokenizer.eos_id)]
+                        except ValueError:
+                            pass
+                        out = self.tokenizer.decode(t)
+                        print(out)
+                        print("\n==================================\n")
+        except:
+            print("Error: batch index {}".format(batch_ind))
+            raise
         return
 
     def train_step(self, tokens, targets, start):
@@ -117,15 +123,19 @@ class LLaMA:
     def train(self,
         dataloader: DataLoader,
     ):
-        for batch in dataloader:
-            start, tokens, target_mask = batch
-            prev_pos = 0
-            total_len = tokens.size(dim=1)
-            # TODO: apply weight to each row
-            for cur_pos in range(start, total_len):
-                targets = torch.where(target_mask, tokens[:, cur_pos], -1)
-                self.train_step(tokens[:, prev_pos:cur_pos], targets, prev_pos)
-                prev_pos = cur_pos
+        try:
+            for batch_ind, (start, tokens, target_mask) in tqdm(enumerate(dataloader)):
+                prev_pos = 0
+                total_len = tokens.size(dim=1)
+                # TODO: apply weight to each row
+                for cur_pos in range(start, total_len):
+                    targets = torch.where(target_mask[:, cur_pos], tokens[:, cur_pos], -1)
+                    self.train_step(tokens[:, prev_pos:cur_pos], targets, prev_pos)
+                    prev_pos = cur_pos
+        except:
+            print("Error: batch index {}".format(batch_ind))
+            raise
+        return
 
 
 def sample_top_p(probs, p):

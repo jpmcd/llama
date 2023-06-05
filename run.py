@@ -109,12 +109,14 @@ def main(args):
     prev = time.time()
     print("Getting datasets...")
     squad = datasets.load_from_disk(args.dataset_path)
-    subset = squad['train'].select(range(args.max_eval_samples))
-    n_examples = len(subset)
+    subset = squad['train'].select(range(2 * args.max_eval_samples))
     prev = time_elapsed(prev)
     print("Preprocessing data and loading to gpu...")
     get_input_ids = get_input_ids_fn(tokenizer, make_targets=args.train)
     subset = subset.map(get_input_ids, remove_columns=subset.column_names)
+    subset = subset.filter(lambda example: sum([len(example[column]) for column in subset.column_names]) < args.max_seq_len)
+    subset = subset.select(range(args.max_eval_samples))
+    n_examples = len(subset)
     dataset = list(zip(subset["input_ids"], subset["target_ids"])) if args.train else subset["input_ids"]
     collater = get_collater_fn(
         max_seq_len=args.max_seq_len,
