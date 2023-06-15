@@ -109,30 +109,49 @@ def main(args):
     prev = time.time()
     print("Getting datasets...")
     squad = datasets.load_from_disk(args.dataset_path)
-    subset = squad['train'].select(range(2 * args.max_eval_samples))
+    train_subset = squad['train'].select(range(2 * args.max_train_samples))
+    eval_subset = squad['validation'].select(range(2 * args.max_eval_samples))
     prev = time_elapsed(prev)
     print("Preprocessing data and loading to gpu...")
-    get_input_ids = get_input_ids_fn(tokenizer, make_targets=args.train)
-    subset = subset.map(get_input_ids, remove_columns=subset.column_names)
-    subset = subset.filter(lambda example: sum([len(example[column]) for column in subset.column_names]) < args.max_seq_len)
-    subset = subset.select(range(args.max_eval_samples))
-    n_examples = len(subset)
-    dataset = list(zip(subset["input_ids"], subset["target_ids"])) if args.train else subset["input_ids"]
-    collater = get_collater_fn(
-        max_seq_len=args.max_seq_len,
-        max_gen_len=args.max_gen_len,
-        pad_id=tokenizer.pad_id,
-        make_targets=args.train,
-    )
-    loader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collater)
+    if args.train:
+        training = True
+        get_input_ids = get_input_ids_fn(tokenizer, make_targets=training)
+        subset = train_subset.map(get_input_ids, remove_columns=subset.column_names)
+        subset = subset.filter(lambda example: sum([len(example[column]) for column in subset.column_names]) < args.max_seq_len)
+        subset = subset.select(range(args.max_train_samples))
+        n_examples = len(subset)
+        dataset = list(zip(subset["input_ids"], subset["target_ids"])) if training else subset["input_ids"]
+        collater = get_collater_fn(
+            max_seq_len=args.max_seq_len,
+            max_gen_len=args.max_gen_len,
+            pad_id=tokenizer.pad_id,
+            make_targets=training,
+        )
+        train_loader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collater)
+    if args.generate:
+        training = False
+        get_input_ids = get_input_ids_fn(tokenizer, make_targets=training)
+        subset = eval_subset.map(get_input_ids, remove_columns=subset.column_names)
+        subset = subset.filter(lambda example: sum([len(example[column]) for column in subset.column_names]) < args.max_seq_len)
+        subset = subset.select(range(args.max_eval_samples))
+        n_examples = len(subset)
+        dataset = list(zip(subset["input_ids"], subset["target_ids"])) if training else subset["input_ids"]
+        collater = get_collater_fn(
+            max_seq_len=args.max_seq_len,
+            max_gen_len=args.max_gen_len,
+            pad_id=tokenizer.pad_id,
+            make_targets=training,
+        )
+        eval_loader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collater)
     prev = time_elapsed(prev)
     if args.train:
         print("Finetuning on examples...")
+        generator.train(train_loader)
         prev = time_elapsed(prev)
     if args.generate:
         print(f"Generating stream, {n_examples} examples...")
         generator.generate(
-            loader, max_gen_len=args.max_gen_len, temperature=args.temperature, top_p=args.top_p, output=False,
+            eval_loader, max_gen_len=args.max_gen_len, temperature=args.temperature, top_p=args.top_p, output=False,
         )
         prev = time_elapsed(prev)
 
