@@ -116,7 +116,8 @@ def main(args):
     if args.train:
         training = True
         get_input_ids = get_input_ids_fn(tokenizer, make_targets=training)
-        subset = train_subset.map(get_input_ids, remove_columns=subset.column_names)
+        subset = train_subset
+        subset = subset.map(get_input_ids, remove_columns=subset.column_names)
         subset = subset.filter(lambda example: sum([len(example[column]) for column in subset.column_names]) < args.max_seq_len)
         subset = subset.select(range(args.max_train_samples))
         n_examples = len(subset)
@@ -131,7 +132,8 @@ def main(args):
     if args.generate:
         training = False
         get_input_ids = get_input_ids_fn(tokenizer, make_targets=training)
-        subset = eval_subset.map(get_input_ids, remove_columns=subset.column_names)
+        subset = eval_subset
+        subset = subset.map(get_input_ids, remove_columns=subset.column_names)
         subset = subset.filter(lambda example: sum([len(example[column]) for column in subset.column_names]) < args.max_seq_len)
         subset = subset.select(range(args.max_eval_samples))
         n_examples = len(subset)
