@@ -77,8 +77,7 @@ class LLaMA:
         output: bool = True,
     ):
         try:
-            for batch_ind, (start_pos, tokens, _) in tqdm(enumerate(dataloader)):
-                input_text_mask = tokens != self.tokenizer.pad_id
+            for batch_ind, (start_pos, tokens, input_mask) in tqdm(enumerate(dataloader)):
                 prev_pos = 0
                 total_len = tokens.size(dim=1)
                 for cur_pos in range(start_pos, total_len):
@@ -92,7 +91,7 @@ class LLaMA:
                     next_token = next_token.reshape(-1)
                     # only replace token if prompt has already been generated
                     next_token = torch.where(
-                        input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
+                        input_mask[:, cur_pos], tokens[:, cur_pos], next_token
                     )
                     tokens[:, cur_pos] = next_token
                     prev_pos = cur_pos
@@ -123,13 +122,16 @@ class LLaMA:
     def train(self,
         dataloader: DataLoader,
     ):
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=0.5, betas=(0.9, 0.98), eps=1e-9,
+        )
         try:
-            for batch_ind, (start, tokens, target_mask) in tqdm(enumerate(dataloader)):
+            for batch_ind, (start, tokens, targets_mask) in tqdm(enumerate(dataloader)):
                 prev_pos = 0
                 total_len = tokens.size(dim=1)
                 # TODO: apply weight to each row
                 for cur_pos in range(start, total_len):
-                    targets = torch.where(target_mask[:, cur_pos], tokens[:, cur_pos], -1)
+                    targets = torch.where(targets_mask[:, cur_pos], tokens[:, cur_pos], -1)
                     self.train_step(tokens[:, prev_pos:cur_pos], targets, prev_pos)
                     prev_pos = cur_pos
         except:
