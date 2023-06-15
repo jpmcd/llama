@@ -12,7 +12,7 @@ def get_input_ids_fn(tokenizer, make_targets=False):
     return get_input_ids
 
 def get_collater_fn(max_seq_len=512, max_gen_len=256, pad_id=0, make_targets=False):
-    def collater(batch):
+    def collater(batch, max_gen_len=max_gen_len):
         max_target_len = 0
         if make_targets:
             # TODO: this line  # assert max_gen_len == 0
