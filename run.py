@@ -84,7 +84,7 @@ def load(
     )
     tokenizer = Tokenizer(model_path=tokenizer_path)
     model_args.vocab_size = tokenizer.n_words
-    torch.set_default_tensor_type(torch.cuda.HalfTensor)
+    torch.set_default_tensor_type(torch.HalfTensor)
     model = Transformer(model_args)
     torch.set_default_tensor_type(torch.FloatTensor)
     model.load_state_dict(checkpoint, strict=False)
@@ -110,7 +110,7 @@ def main(args):
     print("Getting datasets...")
     squad = datasets.load_from_disk(args.dataset_path)
     train_subset = squad['train'].select(range(2 * args.max_train_samples))
-    eval_subset = squad['validation'].select(range(2 * args.max_eval_samples))
+    eval_subset = squad['train'].select(range(2 * args.max_eval_samples))
     prev = time_elapsed(prev)
     print("Preprocessing data and loading to gpu...")
     if args.train:

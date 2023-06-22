@@ -25,8 +25,8 @@ def get_collater_fn(max_seq_len=512, max_gen_len=256, pad_id=0, make_targets=Fal
         min_prompt_size = min([len(t) for t in input_ids])
         max_prompt_size = max([len(t) for t in input_ids]) + max_target_len
         total_len = min(max_seq_len, max_gen_len + max_prompt_size)
-        tokens = torch.full((len(batch), total_len), pad_id).cuda().long()
-        targets_mask = torch.full((len(batch), total_len), False, dtype=torch.bool).cuda()
+        tokens = torch.full((len(batch), total_len), pad_id).long()
+        targets_mask = torch.full((len(batch), total_len), False, dtype=torch.bool)
         for k, t in enumerate(input_ids):
             tokens[k, :len(t)] = torch.tensor(t)
             if make_targets:
