@@ -122,9 +122,11 @@ class LLaMA:
     def train(self,
         dataloader: DataLoader,
     ):
+        self.model.train()
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.5, betas=(0.9, 0.98), eps=1e-9,
         )
+        batch_ind = 0
         try:
             for batch_ind, (start, tokens, targets_mask) in tqdm(enumerate(dataloader)):
                 prev_pos = 0
